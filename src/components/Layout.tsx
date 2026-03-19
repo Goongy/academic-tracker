@@ -8,16 +8,19 @@ import {
   Menu,
   GraduationCap,
   ChevronDown,
+  Upload,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import Dashboard from './Dashboard';
 import CoursesView from './CoursesView';
 import CourseDetail from './CourseDetail';
 import SettingsView from './SettingsView';
+import ImportsView from './ImportsView';
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'courses', label: 'Courses', icon: BookOpen },
+  { id: 'imports', label: 'Imports', icon: Upload },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -50,6 +53,8 @@ export default function Layout() {
         return <CoursesView />;
       case 'course-detail':
         return <CourseDetail />;
+      case 'imports':
+        return <ImportsView />;
       case 'settings':
         return <SettingsView />;
       default:

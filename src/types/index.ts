@@ -47,6 +47,20 @@ export interface Assignment {
   isExtraCredit: boolean;
 }
 
+export interface ProfessorInfo {
+  name: string;
+  email: string;
+  phone: string;
+  office: string;
+  officeHours: string;
+}
+
+export interface SyllabusInfo {
+  name: string;
+  size: number;
+  uploadedAt: string; // ISO date string
+}
+
 export interface Course {
   id: string;
   name: string;
@@ -57,6 +71,8 @@ export interface Course {
   finalGradeOverride: number | null; // manual override
   isPassFail: boolean;
   color: string; // tailwind color class prefix, e.g. "indigo"
+  professor?: ProfessorInfo;
+  syllabus?: SyllabusInfo;
 }
 
 export interface Term {

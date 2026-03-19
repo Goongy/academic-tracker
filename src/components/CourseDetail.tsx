@@ -1,29 +1,34 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   ArrowLeft,
   Plus,
   Edit2,
   Trash2,
   AlertTriangle,
-  TrendingUp,
   Target,
   ChevronUp,
   ChevronDown,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Clock,
+  FileText,
+  Upload,
+  Eye,
+  X,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
   calculateCourseGrade,
   getGradeColor,
-  getProgressBarColor,
   getNeededGrade,
   formatDate,
   percentageToLetterGrade,
 } from '../utils/calculations';
-import ProgressBar from './ui/ProgressBar';
-import GradeChart from './ui/GradeChart';
 import CourseModal from './modals/CourseModal';
 import AssignmentModal from './modals/AssignmentModal';
-import type { Assignment, AssignmentCategory, AssignmentStatus } from '../types';
+import type { Assignment, AssignmentCategory, AssignmentStatus, ProfessorInfo } from '../types';
 
 type SortKey = 'dueDate' | 'category' | 'grade' | 'name';
 type SortDir = 'asc' | 'desc';
@@ -64,8 +69,14 @@ const ALL_CATEGORIES: AssignmentCategory[] = [
 
 const ALL_STATUSES: AssignmentStatus[] = ['upcoming', 'submitted', 'graded', 'missing'];
 
+const SYLLABUS_KEY = (courseId: string) => `academic-tracker-syllabus-${courseId}`;
+
+const EMPTY_PROFESSOR: ProfessorInfo = {
+  name: '', email: '', phone: '', office: '', officeHours: '',
+};
+
 export default function CourseDetail() {
-  const { state, setView, selectCourse, deleteCourse, deleteAssignment, updateAssignment } = useApp();
+  const { state, setView, selectCourse, deleteCourse, deleteAssignment, updateAssignment, updateCourse } = useApp();
   const gradeScale = state.settings.gradeScale;
 
   const course = state.courses.find(c => c.id === state.selectedCourseId);
@@ -82,6 +93,13 @@ export default function CourseDetail() {
   const [filterCategory, setFilterCategory] = useState<AssignmentCategory | ''>('');
   const [filterStatus, setFilterStatus] = useState<AssignmentStatus | ''>('');
   const [confirmDeleteCourse, setConfirmDeleteCourse] = useState(false);
+
+  // Professor editing state
+  const [editingProfessor, setEditingProfessor] = useState(false);
+  const [professorDraft, setProfessorDraft] = useState<ProfessorInfo>(EMPTY_PROFESSOR);
+
+  // Syllabus
+  const syllabusInputRef = useRef<HTMLInputElement>(null);
 
   if (!course) {
     return (
@@ -100,7 +118,6 @@ export default function CourseDetail() {
   const gradeInfo = calculateCourseGrade(allAssignments, gradeScale);
   const displayGrade = gradeInfo.predictedGrade ?? gradeInfo.currentGrade;
   const gradeColor = getGradeColor(displayGrade);
-  const progressColor = getProgressBarColor(displayGrade);
   const gradientClass = COLOR_ACCENT_FULL[course.color] ?? COLOR_ACCENT_FULL['indigo'];
 
   // Needed grade calculation
@@ -108,21 +125,6 @@ export default function CourseDetail() {
     course.targetGrade !== null && gradeInfo.weightedGrade !== null
       ? getNeededGrade(gradeInfo.weightedGrade, gradeInfo.remainingWeight, course.targetGrade)
       : null;
-
-  // Category weight breakdown
-  const categoryBreakdown = useMemo(() => {
-    const map: Record<string, { total: number; earned: number; count: number }> = {};
-    for (const a of allAssignments) {
-      if (a.isExtraCredit) continue;
-      if (!map[a.category]) map[a.category] = { total: 0, earned: 0, count: 0 };
-      map[a.category].total += a.weight;
-      map[a.category].count += 1;
-      if (a.status === 'graded' && a.gradeReceived !== null) {
-        map[a.category].earned += (a.gradeReceived / a.totalPossible) * a.weight;
-      }
-    }
-    return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
-  }, [allAssignments]);
 
   // Filtered + sorted assignments
   const filteredAssignments = useMemo(() => {
@@ -179,6 +181,8 @@ export default function CourseDetail() {
 
   function handleDeleteCourse() {
     if (!course) return;
+    // Clean up syllabus from localStorage
+    try { localStorage.removeItem(SYLLABUS_KEY(course.id)); } catch {}
     deleteCourse(course.id);
     selectCourse(null);
     setView('courses');
@@ -196,6 +200,78 @@ export default function CourseDetail() {
       });
     }
   }
+
+  // Professor helpers
+  function startEditProfessor() {
+    if (!course) return;
+    setProfessorDraft(course.professor ? { ...course.professor } : { ...EMPTY_PROFESSOR });
+    setEditingProfessor(true);
+  }
+
+  function saveProfessor() {
+    if (!course) return;
+    const hasSomeValue = Object.values(professorDraft).some(v => v.trim() !== '');
+    updateCourse({
+      ...course,
+      professor: hasSomeValue ? professorDraft : undefined,
+    });
+    setEditingProfessor(false);
+  }
+
+  // Syllabus helpers
+  function handleSyllabusUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!course) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File too large. Please upload a PDF under 10 MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const base64 = ev.target?.result as string;
+        localStorage.setItem(SYLLABUS_KEY(course.id), base64);
+        updateCourse({
+          ...course,
+          syllabus: {
+            name: file.name,
+            size: file.size,
+            uploadedAt: new Date().toISOString(),
+          },
+        });
+      } catch {
+        alert('Could not save syllabus. Storage may be full.');
+      }
+    };
+    reader.readAsDataURL(file);
+    if (syllabusInputRef.current) syllabusInputRef.current.value = '';
+  }
+
+  function handleViewSyllabus() {
+    if (!course) return;
+    const data = localStorage.getItem(SYLLABUS_KEY(course.id));
+    if (!data) return;
+    const win = window.open();
+    if (win) {
+      win.document.write(`<iframe src="${data}" style="width:100%;height:100%;border:none;" />`);
+    }
+  }
+
+  function handleRemoveSyllabus() {
+    if (!course) return;
+    try { localStorage.removeItem(SYLLABUS_KEY(course.id)); } catch {}
+    updateCourse({ ...course, syllabus: undefined });
+  }
+
+  function formatBytes(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  const inputClass =
+    'w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500';
 
   return (
     <div className="space-y-6">
@@ -313,114 +389,270 @@ export default function CourseDetail() {
         </div>
       </div>
 
-      {/* Progress + Target */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Weight Distribution */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-indigo-500" />
-            Weight Distribution
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-              <span>Completed ({gradeInfo.completedWeight.toFixed(0)}%)</span>
-              <span>Remaining ({gradeInfo.remainingWeight.toFixed(0)}%)</span>
-            </div>
-            {/* Stacked bar */}
-            <div className="h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex">
-              <div
-                className={`h-full ${progressColor} transition-all duration-500`}
-                style={{ width: `${gradeInfo.completedWeight}%` }}
-              />
-              <div
-                className="h-full bg-gray-200 dark:bg-gray-600 transition-all duration-500"
-                style={{ width: `${gradeInfo.remainingWeight}%` }}
-              />
-            </div>
-            <div className="space-y-2 mt-3">
-              {categoryBreakdown.map(([cat, data]) => (
-                <div key={cat}>
-                  <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-0.5">
-                    <span className="capitalize">{cat}</span>
-                    <span>{data.total}%</span>
-                  </div>
-                  <ProgressBar
-                    value={data.total}
-                    color={CATEGORY_BADGE[cat as AssignmentCategory]?.includes('indigo')
-                      ? 'bg-indigo-400' : 'bg-gray-400'}
-                    height="xs"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Target Grade */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-            <Target className="w-4 h-4 text-indigo-500" />
-            Grade Target
-          </h3>
-          {course.targetGrade !== null ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Target</span>
-                <span className="text-lg font-bold text-gray-800 dark:text-gray-200">
-                  {course.targetGrade}%
-                  <span className="text-sm font-medium text-gray-500 dark:text-gray-400 ml-1">
-                    ({percentageToLetterGrade(course.targetGrade, gradeScale)})
-                  </span>
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Current trajectory</span>
-                <span className={`text-lg font-bold ${gradeColor}`}>
-                  {displayGrade !== null ? `${displayGrade.toFixed(1)}%` : '—'}
-                </span>
-              </div>
-              {neededGrade !== null && gradeInfo.remainingWeight > 0 && (
-                <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800">
-                  <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mb-0.5">
-                    What you need on remaining work:
-                  </p>
-                  <p className={`text-2xl font-bold ${
-                    neededGrade > 100
-                      ? 'text-red-600 dark:text-red-400'
-                      : neededGrade > 90
-                      ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-emerald-600 dark:text-emerald-400'
-                  }`}>
-                    {neededGrade > 100 ? '> 100%' : neededGrade < 0 ? 'Already there!' : `${neededGrade.toFixed(1)}%`}
-                  </p>
-                  {neededGrade > 100 && (
-                    <p className="text-xs text-red-500 dark:text-red-400 mt-1">
-                      This target may no longer be achievable.
-                    </p>
-                  )}
-                  {neededGrade < 0 && (
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                      You've already achieved your target!
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-400 dark:text-gray-500">
-              No target grade set. Edit the course to add one.
-            </p>
-          )}
-        </div>
-      </div>
-
-      {/* Grade Trend Chart */}
+      {/* Target Grade */}
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
         <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-indigo-500" />
-          Grade Trend
+          <Target className="w-4 h-4 text-indigo-500" />
+          Grade Target
         </h3>
-        <GradeChart assignments={allAssignments} />
+        {course.targetGrade !== null ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Target</span>
+              <span className="text-lg font-bold text-gray-800 dark:text-gray-200">
+                {course.targetGrade}%
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 ml-1">
+                  ({percentageToLetterGrade(course.targetGrade, gradeScale)})
+                </span>
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Current trajectory</span>
+              <span className={`text-lg font-bold ${gradeColor}`}>
+                {displayGrade !== null ? `${displayGrade.toFixed(1)}%` : '—'}
+              </span>
+            </div>
+            {neededGrade !== null && gradeInfo.remainingWeight > 0 && (
+              <div className="p-3 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800">
+                <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mb-0.5">
+                  What you need on remaining work:
+                </p>
+                <p className={`text-2xl font-bold ${
+                  neededGrade > 100
+                    ? 'text-red-600 dark:text-red-400'
+                    : neededGrade > 90
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  {neededGrade > 100 ? '> 100%' : neededGrade < 0 ? 'Already there!' : `${neededGrade.toFixed(1)}%`}
+                </p>
+                {neededGrade > 100 && (
+                  <p className="text-xs text-red-500 dark:text-red-400 mt-1">
+                    This target may no longer be achievable.
+                  </p>
+                )}
+                {neededGrade < 0 && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                    You've already achieved your target!
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 dark:text-gray-500">
+            No target grade set. Edit the course to add one.
+          </p>
+        )}
+      </div>
+
+      {/* Professor Info */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+            <User className="w-4 h-4 text-indigo-500" />
+            Professor
+          </h3>
+          {!editingProfessor && (
+            <button
+              onClick={startEditProfessor}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Edit2 className="w-3 h-3" />
+              {course.professor ? 'Edit' : 'Add'}
+            </button>
+          )}
+        </div>
+
+        {editingProfessor ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={professorDraft.name}
+                  onChange={e => setProfessorDraft(p => ({ ...p, name: e.target.value }))}
+                  placeholder="Dr. Jane Smith"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={professorDraft.email}
+                  onChange={e => setProfessorDraft(p => ({ ...p, email: e.target.value }))}
+                  placeholder="jsmith@university.edu"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Phone</label>
+                <input
+                  type="text"
+                  value={professorDraft.phone}
+                  onChange={e => setProfessorDraft(p => ({ ...p, phone: e.target.value }))}
+                  placeholder="(902) 555-0100"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Office</label>
+                <input
+                  type="text"
+                  value={professorDraft.office}
+                  onChange={e => setProfessorDraft(p => ({ ...p, office: e.target.value }))}
+                  placeholder="LSC 3rd Floor, Room 312"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Office Hours</label>
+              <input
+                type="text"
+                value={professorDraft.officeHours}
+                onChange={e => setProfessorDraft(p => ({ ...p, officeHours: e.target.value }))}
+                placeholder="Mon/Wed 2–4pm, or by appointment"
+                className={inputClass}
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={saveProfessor}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl transition-colors"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditingProfessor(false)}
+                className="px-4 py-2 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 text-xs font-medium rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : course.professor && Object.values(course.professor).some(v => v) ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {course.professor.name && (
+              <div className="flex items-start gap-2">
+                <User className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Name</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{course.professor.name}</p>
+                </div>
+              </div>
+            )}
+            {course.professor.email && (
+              <div className="flex items-start gap-2">
+                <Mail className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Email</p>
+                  <a
+                    href={`mailto:${course.professor.email}`}
+                    className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    {course.professor.email}
+                  </a>
+                </div>
+              </div>
+            )}
+            {course.professor.phone && (
+              <div className="flex items-start gap-2">
+                <Phone className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Phone</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{course.professor.phone}</p>
+                </div>
+              </div>
+            )}
+            {course.professor.office && (
+              <div className="flex items-start gap-2">
+                <MapPin className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Office</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{course.professor.office}</p>
+                </div>
+              </div>
+            )}
+            {course.professor.officeHours && (
+              <div className="flex items-start gap-2 sm:col-span-2">
+                <Clock className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Office Hours</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{course.professor.officeHours}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 dark:text-gray-500">
+            No professor details added yet.
+          </p>
+        )}
+      </div>
+
+      {/* Syllabus */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
+          <FileText className="w-4 h-4 text-indigo-500" />
+          Syllabus
+        </h3>
+
+        {course.syllabus ? (
+          <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-700">
+            <div className="flex items-center gap-3">
+              <FileText className="w-5 h-5 text-indigo-500 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{course.syllabus.name}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {formatBytes(course.syllabus.size)} · Uploaded {new Date(course.syllabus.uploadedAt).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleViewSyllabus}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                View
+              </button>
+              <button
+                onClick={() => syllabusInputRef.current?.click()}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Replace
+              </button>
+              <button
+                onClick={handleRemoveSyllabus}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                title="Remove syllabus"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => syllabusInputRef.current?.click()}
+            className="w-full flex flex-col items-center justify-center gap-2 p-6 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500 hover:border-indigo-300 dark:hover:border-indigo-600 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+          >
+            <Upload className="w-6 h-6" />
+            <span className="text-sm font-medium">Upload Syllabus PDF</span>
+            <span className="text-xs">Max 10 MB</span>
+          </button>
+        )}
+
+        <input
+          ref={syllabusInputRef}
+          type="file"
+          accept="application/pdf"
+          onChange={handleSyllabusUpload}
+          className="hidden"
+        />
       </div>
 
       {/* Assignment Table */}
@@ -519,42 +751,6 @@ export default function CourseDetail() {
           </div>
         )}
       </div>
-
-      {/* Category Breakdown Chart */}
-      {categoryBreakdown.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
-            Category Breakdown
-          </h3>
-          <div className="space-y-3">
-            {categoryBreakdown.map(([cat, data]) => {
-              const earnedPct = data.total > 0 ? (data.earned / data.total) * 100 : 0;
-              return (
-                <div key={cat}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs px-2 py-0.5 rounded-full capitalize font-medium ${CATEGORY_BADGE[cat as AssignmentCategory]}`}>
-                        {cat}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        {data.count} item{data.count !== 1 ? 's' : ''} · {data.total}% of grade
-                      </span>
-                    </div>
-                    <span className={`text-xs font-medium ${getGradeColor(earnedPct || null)}`}>
-                      {earnedPct > 0 ? `${earnedPct.toFixed(1)}%` : 'Not graded'}
-                    </span>
-                  </div>
-                  <ProgressBar
-                    value={data.total}
-                    color={getProgressBarColor(earnedPct || null)}
-                    height="sm"
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Modals */}
       {showCourseModal && (
