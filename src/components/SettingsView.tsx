@@ -10,9 +10,11 @@ import {
   AlertCircle,
   Plus,
   Trash2,
+  FileSearch,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getSeedData } from '../data/seedData';
+import TranscriptUpload from './TranscriptUpload';
 
 export default function SettingsView() {
   const { state, updateSettings, exportToJSON, exportToCSV, importFromJSON, dispatch, addTerm } = useApp();
@@ -207,6 +209,18 @@ export default function SettingsView() {
             Add
           </button>
         </div>
+      </div>
+
+      {/* Transcript Import */}
+      <div className={sectionClass}>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1 flex items-center gap-2">
+          <FileSearch className="w-4 h-4 text-indigo-500" />
+          Import from Transcript
+        </h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Upload a PDF or photo of your university transcript and AI will automatically extract your courses and grades.
+        </p>
+        <TranscriptUpload />
       </div>
 
       {/* Data Export / Import */}
