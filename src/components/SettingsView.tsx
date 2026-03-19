@@ -9,6 +9,7 @@ import {
   CheckCircle,
   AlertCircle,
   Plus,
+  Trash2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getSeedData } from '../data/seedData';
@@ -21,6 +22,7 @@ export default function SettingsView() {
   const [targetGPAInput, setTargetGPAInput] = useState(String(state.settings.targetGPA));
   const [newTermName, setNewTermName] = useState('');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   function handleTargetGPASave() {
     const val = parseFloat(targetGPAInput);
@@ -48,6 +50,19 @@ export default function SettingsView() {
   function handleReset() {
     dispatch({ type: 'LOAD_DATA', payload: getSeedData() });
     setShowResetConfirm(false);
+  }
+
+  function handleClearAll() {
+    dispatch({
+      type: 'LOAD_DATA',
+      payload: {
+        courses: [],
+        assignments: [],
+        terms: [],
+        settings: state.settings,
+      },
+    });
+    setShowClearConfirm(false);
   }
 
   function handleAddTerm() {
@@ -323,6 +338,41 @@ export default function SettingsView() {
             </button>
             <button
               onClick={() => setShowResetConfirm(false)}
+              className="px-4 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Clear All Data */}
+      <div className={`${sectionClass} border-red-100 dark:border-red-900/40`}>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">
+          Clear All Data
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Start completely fresh with no courses, assignments, or terms. Perfect for setting up your own data from scratch.
+        </p>
+        {!showClearConfirm ? (
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            Clear Everything
+          </button>
+        ) : (
+          <div className="flex gap-3">
+            <button
+              onClick={handleClearAll}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-red-600 hover:bg-red-700 text-white transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+              Yes, Delete Everything
+            </button>
+            <button
+              onClick={() => setShowClearConfirm(false)}
               className="px-4 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               Cancel
