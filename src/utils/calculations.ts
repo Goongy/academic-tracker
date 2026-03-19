@@ -1,38 +1,58 @@
-import type { Assignment, Course, CourseGradeInfo } from '../types';
+import type { Assignment, Course, CourseGradeInfo, GradeScaleEntry } from '../types';
 
-export function percentageToLetterGrade(pct: number): string {
-  if (pct >= 97) return 'A+';
-  if (pct >= 93) return 'A';
-  if (pct >= 90) return 'A-';
-  if (pct >= 87) return 'B+';
-  if (pct >= 83) return 'B';
-  if (pct >= 80) return 'B-';
-  if (pct >= 77) return 'C+';
-  if (pct >= 73) return 'C';
-  if (pct >= 70) return 'C-';
-  if (pct >= 67) return 'D+';
-  if (pct >= 63) return 'D';
-  if (pct >= 60) return 'D-';
-  return 'F';
+function applyScale<T>(
+  pct: number,
+  gradeScale: GradeScaleEntry[] | undefined,
+  picker: (e: GradeScaleEntry) => T,
+  fallback: () => T,
+): T {
+  if (gradeScale && gradeScale.length > 0) {
+    const sorted = [...gradeScale].sort((a, b) => b.minPercent - a.minPercent);
+    for (const entry of sorted) {
+      if (pct >= entry.minPercent) return picker(entry);
+    }
+    return picker(sorted[sorted.length - 1]);
+  }
+  return fallback();
 }
 
-export function percentageToGPA(pct: number): number {
-  if (pct >= 97) return 4.0;
-  if (pct >= 93) return 4.0;
-  if (pct >= 90) return 3.7;
-  if (pct >= 87) return 3.3;
-  if (pct >= 83) return 3.0;
-  if (pct >= 80) return 2.7;
-  if (pct >= 77) return 2.3;
-  if (pct >= 73) return 2.0;
-  if (pct >= 70) return 1.7;
-  if (pct >= 67) return 1.3;
-  if (pct >= 63) return 1.0;
-  if (pct >= 60) return 0.7;
-  return 0.0;
+export function percentageToLetterGrade(pct: number, gradeScale?: GradeScaleEntry[]): string {
+  return applyScale(pct, gradeScale, e => e.letter, () => {
+    if (pct >= 97) return 'A+';
+    if (pct >= 93) return 'A';
+    if (pct >= 90) return 'A-';
+    if (pct >= 87) return 'B+';
+    if (pct >= 83) return 'B';
+    if (pct >= 80) return 'B-';
+    if (pct >= 77) return 'C+';
+    if (pct >= 73) return 'C';
+    if (pct >= 70) return 'C-';
+    if (pct >= 67) return 'D+';
+    if (pct >= 63) return 'D';
+    if (pct >= 60) return 'D-';
+    return 'F';
+  });
 }
 
-export function calculateCourseGrade(assignments: Assignment[]): CourseGradeInfo {
+export function percentageToGPA(pct: number, gradeScale?: GradeScaleEntry[]): number {
+  return applyScale(pct, gradeScale, e => e.gpaPoints, () => {
+    if (pct >= 97) return 4.0;
+    if (pct >= 93) return 4.0;
+    if (pct >= 90) return 3.7;
+    if (pct >= 87) return 3.3;
+    if (pct >= 83) return 3.0;
+    if (pct >= 80) return 2.7;
+    if (pct >= 77) return 2.3;
+    if (pct >= 73) return 2.0;
+    if (pct >= 70) return 1.7;
+    if (pct >= 67) return 1.3;
+    if (pct >= 63) return 1.0;
+    if (pct >= 60) return 0.7;
+    return 0.0;
+  });
+}
+
+export function calculateCourseGrade(assignments: Assignment[], gradeScale?: GradeScaleEntry[]): CourseGradeInfo {
   const warnings: string[] = [];
 
   // Separate extra credit and regular assignments
@@ -100,8 +120,8 @@ export function calculateCourseGrade(assignments: Assignment[]): CourseGradeInfo
     : null;
 
   const displayGrade = predictedGrade ?? currentGrade ?? 0;
-  const letterGrade = currentGrade !== null ? percentageToLetterGrade(displayGrade) : '—';
-  const gpaPoints = currentGrade !== null ? percentageToGPA(displayGrade) : 0;
+  const letterGrade = currentGrade !== null ? percentageToLetterGrade(displayGrade, gradeScale) : '—';
+  const gpaPoints = currentGrade !== null ? percentageToGPA(displayGrade, gradeScale) : 0;
 
   return {
     currentGrade,
@@ -118,7 +138,8 @@ export function calculateCourseGrade(assignments: Assignment[]): CourseGradeInfo
 export function calculateTermGPA(
   courses: Course[],
   assignments: Assignment[],
-  termName: string
+  termName: string,
+  gradeScale?: GradeScaleEntry[]
 ): number {
   const termCourses = courses.filter(c => c.term === termName);
   if (termCourses.length === 0) return 0;
@@ -134,13 +155,13 @@ export function calculateTermGPA(
 
     if (course.finalGradeOverride !== null) {
       const pct = course.finalGradeOverride;
-      const gpa = percentageToGPA(pct);
+      const gpa = percentageToGPA(pct, gradeScale);
       totalQualityPoints += gpa * course.creditHours;
       totalCreditHours += course.creditHours;
       continue;
     }
 
-    gradeInfo = calculateCourseGrade(courseAssignments);
+    gradeInfo = calculateCourseGrade(courseAssignments, gradeScale);
     const effectiveGrade = gradeInfo.predictedGrade ?? gradeInfo.currentGrade;
     if (effectiveGrade === null) continue;
 
@@ -155,7 +176,8 @@ export function calculateTermGPA(
 
 export function calculateCumulativeGPA(
   courses: Course[],
-  assignments: Assignment[]
+  assignments: Assignment[],
+  gradeScale?: GradeScaleEntry[]
 ): number {
   if (courses.length === 0) return 0;
 
@@ -169,13 +191,13 @@ export function calculateCumulativeGPA(
 
     if (course.finalGradeOverride !== null) {
       const pct = course.finalGradeOverride;
-      const gpa = percentageToGPA(pct);
+      const gpa = percentageToGPA(pct, gradeScale);
       totalQualityPoints += gpa * course.creditHours;
       totalCreditHours += course.creditHours;
       continue;
     }
 
-    const gradeInfo = calculateCourseGrade(courseAssignments);
+    const gradeInfo = calculateCourseGrade(courseAssignments, gradeScale);
     const effectiveGrade = gradeInfo.predictedGrade ?? gradeInfo.currentGrade;
     if (effectiveGrade === null) continue;
 

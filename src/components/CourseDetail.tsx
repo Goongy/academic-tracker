@@ -66,6 +66,7 @@ const ALL_STATUSES: AssignmentStatus[] = ['upcoming', 'submitted', 'graded', 'mi
 
 export default function CourseDetail() {
   const { state, setView, selectCourse, deleteCourse, deleteAssignment, updateAssignment } = useApp();
+  const gradeScale = state.settings.gradeScale;
 
   const course = state.courses.find(c => c.id === state.selectedCourseId);
   const allAssignments = useMemo(
@@ -96,7 +97,7 @@ export default function CourseDetail() {
     );
   }
 
-  const gradeInfo = calculateCourseGrade(allAssignments);
+  const gradeInfo = calculateCourseGrade(allAssignments, gradeScale);
   const displayGrade = gradeInfo.predictedGrade ?? gradeInfo.currentGrade;
   const gradeColor = getGradeColor(displayGrade);
   const progressColor = getProgressBarColor(displayGrade);
@@ -281,7 +282,7 @@ export default function CourseDetail() {
           </p>
           <p className={`text-sm font-medium ${gradeColor}`}>
             {gradeInfo.currentGrade !== null
-              ? percentageToLetterGrade(gradeInfo.currentGrade)
+              ? percentageToLetterGrade(gradeInfo.currentGrade, gradeScale)
               : '—'}
           </p>
         </div>
@@ -368,7 +369,7 @@ export default function CourseDetail() {
                 <span className="text-lg font-bold text-gray-800 dark:text-gray-200">
                   {course.targetGrade}%
                   <span className="text-sm font-medium text-gray-500 dark:text-gray-400 ml-1">
-                    ({percentageToLetterGrade(course.targetGrade)})
+                    ({percentageToLetterGrade(course.targetGrade, gradeScale)})
                   </span>
                 </span>
               </div>

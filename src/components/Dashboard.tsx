@@ -43,6 +43,7 @@ const COLOR_ACCENT: Record<string, string> = {
 
 export default function Dashboard() {
   const { state, setView, selectCourse } = useApp();
+  const gradeScale = state.settings.gradeScale;
 
   const activeTerm = useMemo(
     () => state.terms.find(t => t.id === state.settings.activeTermId),
@@ -61,19 +62,19 @@ export default function Dashboard() {
     const map = new Map<string, ReturnType<typeof calculateCourseGrade>>();
     for (const course of termCourses) {
       const assignments = state.assignments.filter(a => a.courseId === course.id);
-      map.set(course.id, calculateCourseGrade(assignments));
+      map.set(course.id, calculateCourseGrade(assignments, gradeScale));
     }
     return map;
-  }, [termCourses, state.assignments]);
+  }, [termCourses, state.assignments, gradeScale]);
 
   const termGPA = useMemo(
-    () => calculateTermGPA(state.courses, state.assignments, activeTermName),
-    [state.courses, state.assignments, activeTermName]
+    () => calculateTermGPA(state.courses, state.assignments, activeTermName, gradeScale),
+    [state.courses, state.assignments, activeTermName, gradeScale]
   );
 
   const cumulativeGPA = useMemo(
-    () => calculateCumulativeGPA(state.courses, state.assignments),
-    [state.courses, state.assignments]
+    () => calculateCumulativeGPA(state.courses, state.assignments, gradeScale),
+    [state.courses, state.assignments, gradeScale]
   );
 
   // Average grade across active term courses

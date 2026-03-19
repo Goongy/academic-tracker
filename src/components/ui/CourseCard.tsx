@@ -35,7 +35,7 @@ export default function CourseCard({ courseId }: CourseCardProps) {
   if (!course) return null;
 
   const assignments = state.assignments.filter(a => a.courseId === courseId);
-  const gradeInfo = calculateCourseGrade(assignments);
+  const gradeInfo = calculateCourseGrade(assignments, state.settings.gradeScale);
 
   const displayGrade = gradeInfo.predictedGrade ?? gradeInfo.currentGrade;
   const gradeColor = getGradeColor(displayGrade);

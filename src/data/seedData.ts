@@ -1,4 +1,4 @@
-import type { AppData } from '../types';
+import { DALHOUSIE_GRADE_SCALE, type AppData } from '../types';
 
 export function getSeedData(): AppData {
   return {
@@ -10,6 +10,7 @@ export function getSeedData(): AppData {
       darkMode: false,
       targetGPA: 3.5,
       activeTermId: 'term-spring-2025',
+      gradeScale: DALHOUSIE_GRADE_SCALE,
     },
     courses: [
       // ── Fall 2024 (completed) ──────────────────────────────────────────

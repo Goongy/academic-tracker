@@ -11,10 +11,12 @@ import {
   Plus,
   Trash2,
   FileSearch,
+  Sliders,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getSeedData } from '../data/seedData';
 import TranscriptUpload from './TranscriptUpload';
+import { DALHOUSIE_GRADE_SCALE, type GradeScaleEntry } from '../types';
 
 export default function SettingsView() {
   const { state, updateSettings, exportToJSON, exportToCSV, importFromJSON, dispatch, addTerm } = useApp();
@@ -25,6 +27,10 @@ export default function SettingsView() {
   const [newTermName, setNewTermName] = useState('');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [editableScale, setEditableScale] = useState<GradeScaleEntry[]>(
+    () => state.settings.gradeScale ? [...state.settings.gradeScale] : [...DALHOUSIE_GRADE_SCALE]
+  );
+  const [scaleSaveStatus, setScaleSaveStatus] = useState<'idle' | 'saved'>('idle');
 
   function handleTargetGPASave() {
     const val = parseFloat(targetGPAInput);
@@ -155,6 +161,108 @@ export default function SettingsView() {
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
           Current target: <span className="font-semibold text-indigo-600 dark:text-indigo-400">{state.settings.targetGPA.toFixed(1)}</span>
         </p>
+      </div>
+
+      {/* Grade Scale */}
+      <div className={sectionClass}>
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1 flex items-center gap-2">
+          <Sliders className="w-4 h-4 text-indigo-500" />
+          Grade Scale
+        </h2>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          Preloaded with Dalhousie University's official scale. Edit the minimum percentage or GPA points for any letter grade — all calculations update immediately after saving.
+        </p>
+
+        {/* Column headers */}
+        <div className="flex items-center gap-2 px-3 mb-1">
+          <span className="text-xs font-medium text-gray-400 dark:text-gray-500 w-10">Grade</span>
+          <span className="text-xs font-medium text-gray-400 dark:text-gray-500 flex-1">Min %</span>
+          <span className="text-xs font-medium text-gray-400 dark:text-gray-500 w-20 text-right">GPA pts</span>
+        </div>
+
+        <div className="space-y-1.5">
+          {editableScale.map((entry, i) => {
+            const isLowest = i === editableScale.length - 1;
+            return (
+              <div
+                key={entry.letter}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700"
+              >
+                {/* Letter grade — fixed label */}
+                <span className="font-mono font-bold text-sm text-gray-800 dark:text-gray-200 w-10">
+                  {entry.letter}
+                </span>
+
+                {/* Min % input */}
+                <div className="flex-1 flex items-center gap-1.5">
+                  <span className="text-xs text-gray-400">≥</span>
+                  <input
+                    type="number"
+                    value={entry.minPercent}
+                    onChange={e => {
+                      const val = Math.min(100, Math.max(0, Number(e.target.value)));
+                      setEditableScale(prev =>
+                        prev.map((s, j) => j === i ? { ...s, minPercent: val } : s)
+                      );
+                    }}
+                    min={0}
+                    max={100}
+                    step={1}
+                    disabled={isLowest}
+                    className="w-16 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-center"
+                  />
+                  <span className="text-xs text-gray-400">%</span>
+                </div>
+
+                {/* GPA points input */}
+                <input
+                  type="number"
+                  value={entry.gpaPoints}
+                  onChange={e => {
+                    const val = Math.max(0, Number(parseFloat(e.target.value).toFixed(1)));
+                    setEditableScale(prev =>
+                      prev.map((s, j) => j === i ? { ...s, gpaPoints: val } : s)
+                    );
+                  }}
+                  min={0}
+                  max={5}
+                  step={0.1}
+                  className="w-20 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-right"
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-between mt-4">
+          <button
+            onClick={() => {
+              const fresh = [...DALHOUSIE_GRADE_SCALE];
+              setEditableScale(fresh);
+              updateSettings({ gradeScale: fresh });
+              setScaleSaveStatus('saved');
+              setTimeout(() => setScaleSaveStatus('idle'), 2000);
+            }}
+            className="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 underline underline-offset-2 transition-colors"
+          >
+            Reset to Dalhousie defaults
+          </button>
+          <button
+            onClick={() => {
+              updateSettings({ gradeScale: editableScale });
+              setScaleSaveStatus('saved');
+              setTimeout(() => setScaleSaveStatus('idle'), 2000);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl transition-colors"
+          >
+            {scaleSaveStatus === 'saved' ? (
+              <><CheckCircle className="w-4 h-4" /> Saved</>
+            ) : (
+              'Save Scale'
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Terms Management */}

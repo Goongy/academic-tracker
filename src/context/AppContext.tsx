@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import type { AppData, Course, Assignment, Term, AppSettings } from '../types';
+import { DALHOUSIE_GRADE_SCALE, type AppData, type Course, type Assignment, type Term, type AppSettings } from '../types';
 import { getSeedData } from '../data/seedData';
 
 const STORAGE_KEY = 'academic-tracker-data';
@@ -150,6 +150,10 @@ function loadFromStorage(): AppData | null {
     // Basic validation
     if (!parsed.courses || !parsed.assignments || !parsed.terms || !parsed.settings) {
       return null;
+    }
+    // Migrate: add gradeScale if missing (existing users before this feature)
+    if (!parsed.settings.gradeScale || parsed.settings.gradeScale.length === 0) {
+      parsed.settings.gradeScale = DALHOUSIE_GRADE_SCALE;
     }
     return parsed;
   } catch {
