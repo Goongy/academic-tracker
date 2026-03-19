@@ -60,7 +60,10 @@ export default function Layout() {
   const Sidebar = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100 dark:border-gray-700">
+      <button
+        onClick={() => handleNav('dashboard')}
+        className="flex items-center gap-3 px-6 py-5 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-full text-left"
+      >
         <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center flex-shrink-0">
           <GraduationCap className="w-4.5 h-4.5 text-white" style={{ width: 18, height: 18 }} />
         </div>
@@ -70,7 +73,7 @@ export default function Layout() {
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">GPA Dashboard</p>
         </div>
-      </div>
+      </button>
 
       {/* Term Switcher */}
       <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
